@@ -2,6 +2,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram import KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import run_async
 from telegram.ext import ConversationHandler
+from telegram.error import BadRequest
 import hashlib
 import time
 
@@ -81,8 +82,9 @@ def choose_version(update, context):
     kb = []
     for i in hashing_algorithms[algorithm]:
         kb.append([KeyboardButton(i)])
-    update.message.reply_text("Algorithm: %s\n"
-                              "Version:   ---\n" % (algorithm))
+    update.message.reply_text("Algorithm: <b>%s</b>\n"
+                              "Version:   <b>---</b>\n" % (algorithm),
+                              parse_mode="HTML")
     update.message.reply_text("Choose version for %s\n"
                               "You can use /close to stop" % (algorithm),
                                 reply_markup=ReplyKeyboardMarkup(kb, one_time_keyboard=True))
@@ -92,14 +94,16 @@ def get_data(update, context):
     version = update.message.text
     context.user_data["version"] = version
     algorithm = context.user_data["algorithm"]
-    update.message.reply_text("Algorithm: %s\n"
-                              "Version:   %s\n" % (algorithm, version))
+    update.message.reply_text("Algorithm: <b>%s</b>\n"
+                              "Version:   <b>%s</b>\n" % (algorithm, version),
+                              parse_mode="HTML")
     update.message.reply_text("Send me text message if you want to hash text"
                               " or send me any other file by sending it like a file\n"
                               "You can use /close to stop\n\n"
-                              "You could probably break the bot if you send file that is bigger then 500 mb :)"
-                              "If it happened write to @brebiv immediately")
-    update.message.reply_text("Send me what you want to hash with %s\n" % (version))
+                              "Send files that is <b>less then 20 mb</b>. Because it is Telegram restriction",
+                              parse_mode="HTML")
+    update.message.reply_text("Send me what you want to hash with <b>%s</b>\n" % (version),
+                              parse_mode="HTML")
     return CRYPT
 
 def crypt(update, context):
@@ -111,11 +115,24 @@ def crypt(update, context):
     hashed_data = None
 
     if message.document:
-        update.message.reply_text("Please wait, it may take some time\n"
-                                  "Depends on your file size.......")
-        file = context.bot.getFile(update.message.document.file_id)
-        data = file.download_as_bytearray()
-        hashed_data = hashlib.new(version, data).hexdigest()
+        # print(f"\n\n\n {file.file_size} \n\n\n")
+        try:
+            file = context.bot.getFile(update.message.document.file_id)
+        except BadRequest:
+            update.message.reply_text("File is too <b>BIG</b>\n"
+                                      "File should be less then <b>20 mb</b>. It's <i>not mine</i>, "
+                                      "it's Telegram restriction.\n"
+                                      "Please send file with correct size or text",
+                                      parse_mode="HTML")
+            return CRYPT
+        except:
+            update.message.reply_text("Unknown error happened ¯\_(ツ)_/¯")
+            return ConversationHandler.END
+        else:
+            update.message.reply_text("Please wait, it may take some time\n"
+                                      "Depends on your file size.......")
+            data = file.download_as_bytearray()
+            hashed_data = hashlib.new(version, data).hexdigest()
     else:
         data = message.text
         hashed_data = hashlib.new(version, str.encode(data)).hexdigest()
