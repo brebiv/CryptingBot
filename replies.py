@@ -1,17 +1,38 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import KeyboardButton, ReplyKeyboardMarkup
+from telegram.ext import run_async
+from telegram.ext import ConversationHandler
+import hashlib
+import time
 
-greeting_text = """
+greeting_text = \
+"""
 <b>Welcome!</b>\n
 This bot allows you to use crypting algorithms\n
+Now available popular hashing algorithms
+Crypt algorithms <b>SOON</b>\n
 Author                  <a href="tg://user?id=brebiv">@brebiv</a>
 """
-help_text = """\
+help_text = \
+"""
 With this bot you can use popular crypting algorithms to provide secure of your data.
-Sounds hard? Don't worry I'll tell how to use it ;)
+For now only hashing algorithms available. Crypt algorithms like AES will be able soon!
 """
-more_help_text = """\
-More help text
+more_help_text = \
 """
+Hashing:
+https://en.wikipedia.org/wiki/Hash_function
+"""
+hashing_algorithms = {
+        "SHA" : ["sha1", "sha224", "sha256", "sha384", "sha512"],
+        "md" : ["md4","md5"]}
+
+def generate_regex():
+    regex = ""
+    for i in hashing_algorithms:
+        for j in hashing_algorithms[i]:
+            regex += "|%s" % (j)
+    return '^('+ regex +')$'
 
 def greeting(self, update, context):
     kb = [[InlineKeyboardButton("Crypt!", callback_data="crypt")],
@@ -43,12 +64,66 @@ def more_help(self, update, context, callback):
         del self.help_m
     self.more_help_m = context.bot.send_message(callback.message.chat.id, more_help_text)
 
-def crypt(self, update, context, callback):
-    if self.help_m:
-        context.bot.delete_message(callback.message.chat.id, self.help_m.message_id)
-        del self.help_m
-    elif self.greeting_m:
-        context.bot.delete_message(callback.message.chat.id, self.greeting_m.message_id)
-        del self.greeting_m
-    self.choose_m = context.bot.send_message(callback.message.chat.id, "Crypting")
+CHOOSE_ALGORITHM, CHOOSE_VERSION, GET, CRYPT = range(4)
 
+def choose_algorithm(update, context):
+    kb = []
+    for i in hashing_algorithms:
+        kb.append([KeyboardButton(i)])
+    update.message.reply_text("Choose algorithm\n"
+                              "You can use /close to stop",
+                                reply_markup=ReplyKeyboardMarkup(kb, one_time_keyboard=True))
+    return CHOOSE_VERSION
+
+def choose_version(update, context):
+    algorithm = update.message.text
+    context.user_data["algorithm"] = algorithm
+    kb = []
+    for i in hashing_algorithms[algorithm]:
+        kb.append([KeyboardButton(i)])
+    update.message.reply_text("Algorithm: %s\n"
+                              "Version:   ---\n" % (algorithm))
+    update.message.reply_text("Choose version for %s\n"
+                              "You can use /close to stop" % (algorithm),
+                                reply_markup=ReplyKeyboardMarkup(kb, one_time_keyboard=True))
+    return GET
+
+def get_data(update, context):
+    version = update.message.text
+    context.user_data["version"] = version
+    algorithm = context.user_data["algorithm"]
+    update.message.reply_text("Algorithm: %s\n"
+                              "Version:   %s\n" % (algorithm, version))
+    update.message.reply_text("Send me text message if you want to hash text"
+                              " or send me any other file by sending it like a file\n"
+                              "You can use /close to stop\n\n"
+                              "You could probably break the bot if you send file that is bigger then 500 mb :)"
+                              "If it happened write to @brebiv immediately")
+    update.message.reply_text("Send me what you want to hash with %s\n" % (version))
+    return CRYPT
+
+def crypt(update, context):
+    start = time.time()
+
+    message = update.message
+    data = None
+    version = context.user_data["version"]
+    hashed_data = None
+
+    if message.document:
+        update.message.reply_text("Please wait, it may take some time\n"
+                                  "Depends on your file size.......")
+        file = context.bot.getFile(update.message.document.file_id)
+        data = file.download_as_bytearray()
+        hashed_data = hashlib.new(version, data).hexdigest()
+    else:
+        data = message.text
+        hashed_data = hashlib.new(version, str.encode(data)).hexdigest()
+
+    update.message.reply_text("Result! It was hashed with %s" %(version))
+    update.message.reply_text("Here it is:\n%s" %hashed_data)
+    update.message.reply_text("Done in %.2f sec" % (time.time()-start))
+    return ConversationHandler.END
+
+def close(self, update, context):
+    return ConversationHandler.END
