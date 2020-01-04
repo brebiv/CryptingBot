@@ -1,0 +1,3 @@
+start - Welcome!
+hash - Let's use hash function!
+crypt - Let's crypt!
