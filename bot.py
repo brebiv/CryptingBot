@@ -19,26 +19,52 @@ class Bot:
     more_help_m = None              # Advanced help message
     choose_m = None                 # Choose algorithm message
 
-    # states
-    CHOOSE_ALGORITHM, CHOOSE_VERSION, GET, CRYPT = range(4)
+    # conversation states
+    CHOOSE_ALGORITHM, CHOOSE_VERSION, GET, HASH = range(4)
+    CHOOSE_METHOD, KEY, GET, ENCRYPT = range(4)
+    CHOOSE_METHOD, GET_KEY, GET_FILE, DECRYPT = range(4)
 
     reg = replies.generate_regex()
 
     def main(self):
-        crypt_conv = ConversationHandler\
+        hash_conv = ConversationHandler\
         (
-                entry_points=[CommandHandler("crypt", replies.choose_algorithm)],
+                entry_points=[CommandHandler("hash", replies.choose_algorithm)],
                 states={
                     self.CHOOSE_VERSION: [MessageHandler(Filters.regex('^(SHA|md)$'), replies.choose_version)],
                     self.GET: [MessageHandler(Filters.regex('^(%s)$'%(self.reg)), replies.get_data)],
-                    self.CRYPT: [MessageHandler(Filters.text | Filters.document, replies.crypt)]
+                    self.HASH: [MessageHandler(Filters.text | Filters.document, replies.hash)]
                     },
                 fallbacks=[MessageHandler(Filters.regex('^Close$'), replies.close)]
         )
 
+        encrypt_conv = ConversationHandler\
+        (
+            entry_points=[CommandHandler("encrypt", replies.choose_method)],
+            states={
+                self.KEY: [MessageHandler(Filters.text, replies.create_key)],
+                self.GET: [MessageHandler(Filters.text, replies.get_data_to_encrypt)],
+                self.ENCRYPT: [MessageHandler(Filters.text | Filters.document, replies.crypt)]
+            },
+            fallbacks=[MessageHandler(Filters.regex("^Close$"), replies.close)]
+        )
+
+        decrypt_conv = ConversationHandler\
+        (
+            entry_points=[CommandHandler("decrypt", replies.choose_key_type)],
+            states={
+                self.GET_KEY: [MessageHandler(Filters.text, replies.get_data_to_decrypt)],
+                self.GET_FILE: [MessageHandler(Filters.text, replies._decrypt)],
+                self.DECRYPT: [MessageHandler(Filters.text, replies._decrypt)]
+            },
+            fallbacks=[MessageHandler(Filters.regex("^Close%"), replies.close)]
+        )
+
         self.dp.add_handler(CommandHandler("start", self.start_handler))
         self.dp.add_handler(CallbackQueryHandler(self.callback_handler))
-        self.dp.add_handler(crypt_conv)
+        self.dp.add_handler(hash_conv)
+        self.dp.add_handler(encrypt_conv)
+        self.dp.add_handler(decrypt_conv)
 
         self.updater.start_polling()
     
@@ -51,5 +77,7 @@ class Bot:
             replies.help(self, update, context, callback)
         elif callback.data == "more_help":
             replies.more_help(self, update, context, callback)
-        elif callback.data == "crypt":
-            update.callback_query.message.reply_text("Use /crypt to crypt")
+        elif callback.data == "go":
+            update.callback_query.message.reply_text("Use /encrypt to encrypt\n"\
+                                                        "Use /decrypt to decrypt\n"
+                                                        "Use /hash to hash")
